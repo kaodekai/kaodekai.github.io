@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Протокол 6-12/84: Тишина</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #000;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', 'VT323', 'Fira Code', monospace;
+            overflow: hidden;
+            position: relative;
+            font-size: clamp(14px, 4vw, 18px);
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.2) 0px,
+                rgba(0, 0, 0, 0.2) 2px,
+                transparent 2px,
+                transparent 6px
+            );
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0.5;
+            mix-blend-mode: overlay;
+        }
+
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJmIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjciIG51bU9jdGF2ZXM9IjMiLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjZikiIG9wYWNpdHk9IjAuNCIvPjwvc3ZnPg==');
+            background-repeat: repeat;
+            background-size: 140px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 19;
+            transition: opacity 0.25s;
+            mix-blend-mode: overlay;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .screen {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #0a0a0a 0%, #010101 100%);
+            color: #acacac;
+            font-size: clamp(13px, 3.8vw, 17px);
+            padding: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: left;
+            font-weight: normal;
+            letter-spacing: 0.2px;
+            position: relative;
+            overflow-y: auto;
+            box-shadow: inset 0 0 70px rgba(0,0,0,0.95);
+            cursor: pointer;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .message-box {
+            max-width: 100%;
+            width: 100%;
+            background: rgba(0,0,0,0.78);
+            padding: 1.3rem;
+            border-left: 2px solid #3a3a3a;
+            border-right: 1px solid #1f1f1f;
+            backdrop-filter: blur(2px);
+            font-family: 'Courier New', monospace;
+            word-break: break-word;
+            line-height: 1.55;
+            border-radius: 3px;
+        }
+
+        .message-box p {
+            margin-bottom: 0.85rem;
+        }
+        .message-box ol, .message-box ul {
+            margin: 0.6rem 0 0.6rem 1.3rem;
+            padding-left: 0.3rem;
+        }
+        .message-box li {
+            margin-bottom: 0.45rem;
+            line-height: 1.45;
+        }
+        .message-box h3 {
+            margin: 0.8rem 0 0.5rem;
+            color: #bdbdbd;
+            font-size: 1rem;
+            font-style: italic;
+            border-left: 2px solid #5a5a5a;
+            padding-left: 10px;
+            font-weight: normal;
+            letter-spacing: -0.2px;
+        }
+
+        .glitch-char {
+            display: inline-block;
+            filter: blur(0.3px);
+            text-shadow: 0 0 3px #4a4a4a;
+            opacity: 0.85;
+            color: #c7c7c7;
+            animation: vaguePulse 0.25s infinite alternate;
+        }
+        @keyframes vaguePulse {
+            0% { opacity: 0.6; text-shadow: 0 0 1px #888; }
+            100% { opacity: 1; text-shadow: 0 0 4px #bbb; }
+        }
+
+        .void-overlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 45%;
+            background: radial-gradient(ellipse at bottom, rgba(5,5,5,0.7), transparent 85%);
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0;
+            transition: opacity 0.8s;
+        }
+
+        .scream-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s linear;
+        }
+        .scream-content {
+            font-size: clamp(1.4rem, 7vw, 2.5rem);
+            text-align: center;
+            color: #cccccc;
+            text-shadow: 0 0 15px black;
+            background: rgba(10,10,10,0.9);
+            padding: 1.2rem 2rem;
+            border-radius: 3px;
+            border: 1px solid #444;
+            font-family: monospace;
+            letter-spacing: -0.2px;
+        }
+        .scream-content span {
+            display: block;
+            font-size: clamp(0.8rem, 3.5vw, 1.2rem);
+            margin-top: 12px;
+            color: #777;
+        }
+
+        .interactive-buttons {
+            display: flex;
+            gap: 14px;
+            justify-content: center;
+            margin-top: 28px;
+            flex-wrap: wrap;
+        }
+        .interactive-buttons button {
+            background: #181818;
+            border: 1px solid #4a4a4a;
+            color: #cfcfcf;
+            cursor: pointer;
+            padding: 10px 18px;
+            font-size: clamp(11px, 3.5vw, 14px);
+            font-family: monospace;
+            border-radius: 2px;
+            transition: 0.1s;
+        }
+        .interactive-buttons button:active {
+            background: #2a2a2a;
+            transform: scale(0.97);
+        }
+
+        .audio-hint {
+            position: fixed;
+            bottom: 12px;
+            left: 12px;
+            background: rgba(0,0,0,0.6);
+            color: #7a7a7a;
+            font-size: 9px;
+            padding: 4px 10px;
+            font-family: monospace;
+            z-index: 30;
+            border-left: 2px solid #555;
+            pointer-events: none;
+        }
+
+        .radio-player {
+            margin-top: 22px;
+            padding: 12px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #2c2c2c;
+            border-radius: 3px;
+            text-align: center;
+        }
+        .radio-player a {
+            color: #9eb3ff;
+            text-decoration: none;
+        }
+
+        ::-webkit-scrollbar {
+            width: 3px;
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a3a;
+        }
+        
+        @media (max-width: 600px) {
+            .message-box {
+                padding: 1rem;
+            }
+            .screen {
+                padding: 0.8rem;
+            }
+        }
+        
+        .blink {
+            animation: blinkAnime 1s step-end infinite;
+        }
+        @keyframes blinkAnime {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .ascii-art {
+            font-family: monospace;
+            white-space: pre;
+            text-align: center;
+            margin: 1rem 0;
+            color: #8a8a8a;
+            line-height: 1.2;
+            font-size: clamp(10px, 3vw, 14px);
+            letter-spacing: 0;
+        }
+        
+        .ascii-small {
+            font-size: clamp(8px, 2.5vw, 11px);
+        }
+        
+        @keyframes subtlePulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.9; }
+        }
+        
+        .pulse-art {
+            animation: subtlePulse 3s infinite;
+        }
+    </style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="noise-overlay" id="noiseOverlay"></div>
+<div class="void-overlay" id="voidOverlay"></div>
+<div class="scream-overlay" id="screamOverlay">
+    <div class="scream-content">
+        ❒ ПУСТОТА ❒<br>
+        <span>иного не дано</span>
+    </div>
+</div>
+<div class="audio-hint" id="audioHint">⏤ активируй звук ⏤</div>
+<div id="game-container">
+    <div class="screen" id="screen">
+        <div class="message-box" id="messageBox">
+            <div id="dynamicText">загрузка протокола 6-12/84...</div>
+            <div id="buttonArea"></div>
+            <div id="interactivePanel" class="interactive-buttons"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        let audioCtx = null;
+        let droneNode = null;
+        let droneGain = null;
+        let isSoundEnabled = false;
+        let dreadInterval = null;
+        
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const hint = document.getElementById('audioHint');
+            if(hint) hint.innerHTML = '◉ слушай себя ◉';
+        }
+        
+        function startExistentialDrone(volume = 0.06) {
+            if (!audioCtx || !isSoundEnabled) return;
+            if (droneNode) {
+                droneGain.gain.value = volume;
+                return;
+            }
+            const bufferSize = 4096;
+            const noise = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+            noise.onaudioprocess = function(e) {
+                const output = e.outputBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = (Math.random() * 2 - 1) * 0.5;
+                }
+            };
+            const gain = audioCtx.createGain();
+            gain.gain.value = volume;
+            noise.connect(gain);
+            gain.connect(audioCtx.destination);
+            droneNode = noise;
+            droneGain = gain;
+        }
+        
+        function setDroneVolume(volume) {
+            if (droneGain && audioCtx && isSoundEnabled) {
+                droneGain.gain.value = Math.min(0.45, Math.max(0.01, volume));
+            }
+        }
+        
+        function stopDrone() {
+            if (droneNode && audioCtx) {
+                droneNode.disconnect();
+                if (droneGain) droneGain.disconnect();
+                droneNode = null;
+                droneGain = null;
+            }
+        }
+        
+        function playLowRumble() {
+            if (!audioCtx || !isSoundEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.09;
+            osc.type = 'sine';
+            osc.frequency.value = 42 + Math.random() * 25;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+            setTimeout(() => { try { osc.stop(); gain.disconnect(); } catch(e) {} }, 1600);
+        }
+        
+        function playHeartbeatShadow() {
+            if (!audioCtx || !isSoundEnabled || Math.random() > 0.65) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.07;
+            osc.type = 'triangle';
+            osc.frequency.value = 55;
+            osc.frequency.exponentialRampToValueAtTime(38, now + 0.8);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            setTimeout(() => { try { osc.stop(); } catch(e) {} }, 1300);
+        }
+        
+        function startDreadRhythm(intervalSec = 6) {
+            if (dreadInterval) clearInterval(dreadInterval);
+            dreadInterval = setInterval(() => {
+                if (isSoundEnabled && (currentStep === 2 || currentStep === 3)) {
+                    if (Math.random() > 0.5) playLowRumble();
+                    else playHeartbeatShadow();
+                }
+            }, intervalSec * 1000);
+        }
+        
+        function stopDreadRhythm() {
+            if (dreadInterval) clearInterval(dreadInterval);
+            dreadInterval = null;
+        }
+        
+        function playVoidSigh() {
+            if (!audioCtx || !isSoundEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.1;
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(330, now);
+            osc.frequency.exponentialRampToValueAtTime(150, now + 0.4);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+            setTimeout(() => { try { osc.stop(); } catch(e) {} }, 1200);
+        }
+        
+        function showExistentialDread() {
+            const overlay = document.getElementById('screamOverlay');
+            if (!overlay) return;
+            playVoidSigh();
+            overlay.style.transition = 'opacity 0.1s';
+            overlay.style.opacity = '1';
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.transition = ''; }, 300);
+            }, 550);
+        }
+        
+        // Примитивные аски-картинки
+        const asciiShapes = [
+            '<div class="ascii-art">□ □ □<br>  ■<br>□ □ □</div>',
+            '<div class="ascii-art">▲<br>▲ ▲<br>▲   ▲</div>',
+            '<div class="ascii-art">◯<br>◯ ◯<br>◯   ◯</div>',
+            '<div class="ascii-art">┌─┐<br>│ │<br>└─┘</div>',
+            '<div class="ascii-art">╱╲<br>╲╱</div>',
+            '<div class="ascii-art">●<br>● ●<br>●   ●</div>',
+            '<div class="ascii-art">▄ ▄<br> ▄ <br>▄ ▄</div>',
+            '<div class="ascii-art">◇<br>◇ ◇<br>◇   ◇</div>'
+        ];
+        
+        function getRandomAscii() {
+            return asciiShapes[Math.floor(Math.random() * asciiShapes.length)];
+        }
+        
+        let currentStep = 0;
+        let glitchTimer = null;
+        let screenNoiseTimer = null;
+        let step2Timer = null;
+        let voidPulseTimer = null;
+        let asciiInterval = null;
+        const screenElem = document.getElementById('screen');
+        const dynamicDiv = document.getElementById('dynamicText');
+        const buttonArea = document.getElementById('buttonArea');
+        const interactPanel = document.getElementById('interactivePanel');
+        const noiseOverlay = document.getElementById('noiseOverlay');
+        const voidOverlay = document.getElementById('voidOverlay');
+        
+        screenElem.addEventListener('click', () => {
+            if (!audioCtx) {
+                initAudio();
+                isSoundEnabled = true;
+                startExistentialDrone(0.02);
+                setDroneVolume(0.02);
+                document.getElementById('audioHint').innerHTML = '⚫ звук активирован ⚫';
+            } else if (!isSoundEnabled) {
+                isSoundEnabled = true;
+                startExistentialDrone(0.025);
+                setDroneVolume(0.025);
+            }
+        });
+        
+        const aberrationSymbols = ['◌', '◍', '◎', '○', '◔', '⌂', '⌇', '⍟', '⨀', '∅', '◉', '⬤'];
+        function getAberrantSymbol() { return aberrationSymbols[Math.floor(Math.random() * aberrationSymbols.length)]; }
+        
+        function existentialDistortion(htmlString, intensity = 0.08) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = htmlString;
+            function processNode(node) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    let text = node.nodeValue;
+                    let result = '';
+                    for (let i = 0; i < text.length; i++) {
+                        let ch = text[i];
+                        if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '.' || ch === ',' || ch === '—') {
+                            result += ch;
+                            continue;
+                        }
+                        if (Math.random() < intensity) {
+                            result += `<span class="glitch-char">${getAberrantSymbol()}</span>`;
+                        } else if (Math.random() < 0.04 && (ch >= 'а' && ch <= 'я' || ch >= 'А' && ch <= 'Я')) {
+                            const offset = Math.random() > 0.5 ? 1 : -1;
+                            const shifted = String.fromCharCode(ch.charCodeAt(0) + offset);
+                            result += shifted;
+                        } else {
+                            result += ch;
+                        }
+                    }
+                    const spanHolder = document.createElement('span');
+                    spanHolder.innerHTML = result;
+                    node.parentNode.replaceChild(spanHolder, node);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    for (let child of node.childNodes) processNode(child);
+                }
+            }
+            processNode(wrap);
+            return wrap.innerHTML;
+        }
+        
+        function renderDistorted(container, baseHtml, chaos = 0.085, addAscii = true) {
+            let content = baseHtml;
+            if (addAscii && Math.random() < 0.35) {
+                content += getRandomAscii();
+            }
+            container.innerHTML = existentialDistortion(content, chaos);
+        }
+        
+        function clearEffects() {
+            if (glitchTimer) clearInterval(glitchTimer);
+            if (screenNoiseTimer) clearInterval(screenNoiseTimer);
+            if (step2Timer) clearInterval(step2Timer);
+            if (voidPulseTimer) clearInterval(voidPulseTimer);
+            if (asciiInterval) clearInterval(asciiInterval);
+            glitchTimer = null; screenNoiseTimer = null; step2Timer = null; voidPulseTimer = null; asciiInterval = null;
+            if (noiseOverlay) noiseOverlay.style.opacity = '0';
+            screenElem.style.filter = '';
+        }
+        
+        function startVisualDistortion(durationSec = null) {
+            if (noiseOverlay) noiseOverlay.style.opacity = '0.22';
+            if (screenNoiseTimer) clearInterval(screenNoiseTimer);
+            screenNoiseTimer = setInterval(() => {
+                if (Math.random() > 0.6) {
+                    screenElem.style.filter = `contrast(${0.85 + Math.random() * 0.5}) brightness(${0.8 + Math.random() * 0.6})`;
+                } else {
+                    screenElem.style.filter = `contrast(1) brightness(0.97)`;
+                }
+            }, 260);
+            if (durationSec) {
+                setTimeout(() => {
+                    if (screenNoiseTimer) clearInterval(screenNoiseTimer);
+                    screenNoiseTimer = null;
+                    screenElem.style.filter = '';
+                    if (noiseOverlay) noiseOverlay.style.opacity = '0';
+                }, durationSec * 1000);
+            }
+        }
+        
+        function stopVisualDistortion() {
+            if (screenNoiseTimer) clearInterval(screenNoiseTimer);
+            screenNoiseTimer = null;
+            screenElem.style.filter = '';
+            if (noiseOverlay) noiseOverlay.style.opacity = '0';
+        }
+        
+        function pulseVoid() {
+            voidOverlay.style.opacity = '0.5';
+            setTimeout(() => {
+                voidOverlay.style.transition = 'opacity 2s';
+                voidOverlay.style.opacity = '0';
+                setTimeout(() => { voidOverlay.style.transition = ''; }, 2000);
+            }, 700);
+        }
+        
+        function createDespairButtons() {
+            interactPanel.innerHTML = '';
+            const btn1 = document.createElement('button');
+            btn1.innerText = '❒ ОСТАТЬСЯ ❒';
+            const btn2 = document.createElement('button');
+            btn2.innerText = '⧫ ХВАТИТ ⧫';
+            const btn3 = document.createElement('button');
+            btn3.innerText = '◈ ПРИНЯТЬ ◈';
+            const handler = () => { showExistentialDread(); interactPanel.innerHTML = ''; };
+            btn1.addEventListener('click', handler);
+            btn2.addEventListener('click', handler);
+            btn3.addEventListener('click', handler);
+            interactPanel.appendChild(btn1);
+            interactPanel.appendChild(btn2);
+            interactPanel.appendChild(btn3);
+        }
+        
+        function addUvbStream() {
+            const radioDiv = document.createElement('div');
+            radioDiv.className = 'radio-player';
+            radioDiv.innerHTML = `
+                <div>📡 частота 4625 кГц</div>
+                <a href="https://radiopotok.ru/radio/620" target="_blank" rel="noopener noreferrer">⚡ войти в эфир ⚡</a>
+                <div style="font-size:0.65rem; margin-top:5px;">голоса из ниоткуда</div>
+            `;
+            buttonArea.appendChild(radioDiv);
+        }
+        
+        // Финальное напутствие с картинками
+        function showEpilogue() {
+            if (glitchTimer) clearInterval(glitchTimer);
+            if (screenNoiseTimer) clearInterval(screenNoiseTimer);
+            if (step2Timer) clearInterval(step2Timer);
+            if (voidPulseTimer) clearInterval(voidPulseTimer);
+            if (dreadInterval) clearInterval(dreadInterval);
+            if (asciiInterval) clearInterval(asciiInterval);
+            stopVisualDistortion();
+            
+            interactPanel.innerHTML = '';
+            buttonArea.innerHTML = '';
+            
+            if (noiseOverlay) noiseOverlay.style.opacity = '0';
+            if (isSoundEnabled) setDroneVolume(0.05);
+            
+            const shapesRow = asciiShapes.slice(0, 3).map(s => s.replace('ascii-art', 'ascii-art ascii-small')).join('');
+            
+            const epilogueHtml = `
+                <div>
+                    <div class="ascii-art pulse-art" style="margin-bottom: 1rem;">
+                        □   ■   □<br>
+                          ■ ■ <br>
+                        □   ■   □
+                    </div>
+                    <p style="margin-bottom: 1rem;">✦</p>
+                    <p>Всё.</p>
+                    <p>Ты забудешь это. Не важно.  Так устроено.</p>
+                    ${getRandomAscii()}
+                    <p>Останется след. Там, где нет имён.</p>
+                    <div class="ascii-art">▲<br>▲ ▲<br>▲   ▲</div>
+                    <p>То, что было здесь, уже внутри. Не пытайся найти.</p>
+                    <p style="margin: 1rem 0;">Директива:</p>
+                    <div class="ascii-art">●<br>● ●<br>●   ●</div>
+                    <p style="font-size: 1.1rem;">У тебя всё будет хорошо</p>
+                    <p>Констатация.</p>
+                    <div class="ascii-art">◇<br>◇ ◇<br>◇   ◇</div>
+                    <p style="margin-top: 1rem;">✦</p>
+                    <p style="font-size: 0.75rem; color: #6a6a6a; margin-top: 1rem;">протокол 6-12/84 · закрыт</p>
+                </div>
+            `;
+            
+            dynamicDiv.innerHTML = epilogueHtml;
+            
+            // Периодически добавляем плавающие символы
+            asciiInterval = setInterval(() => {
+                if (dynamicDiv && document.body.contains(dynamicDiv)) {
+                    const arts = document.querySelectorAll('.ascii-art');
+                    if (arts.length > 0 && Math.random() < 0.4) {
+                        const randomArt = getRandomAscii();
+                        const newDiv = document.createElement('div');
+                        newDiv.className = 'ascii-art ascii-small';
+                        newDiv.style.opacity = '0.3';
+                        newDiv.style.transition = 'opacity 1s';
+                        newDiv.innerHTML = randomArt.replace('ascii-art', '').replace(/class="[^"]*"/, '');
+                        dynamicDiv.appendChild(newDiv);
+                        setTimeout(() => {
+                            if (newDiv) newDiv.style.opacity = '0';
+                            setTimeout(() => { if (newDiv) newDiv.remove(); }, 1000);
+                        }, 2000);
+                    }
+                }
+            }, 4000);
+            
+            setTimeout(() => {
+                if (isSoundEnabled) {
+                    stopDrone();
+                }
+                if (asciiInterval) clearInterval(asciiInterval);
+            }, 8000);
+        }
+        
+        // СЦЕНАРИЙ
+        function step0_Abandonment() {
+            clearEffects();
+            currentStep = 0;
+            dynamicDiv.innerHTML = '';
+            buttonArea.innerHTML = '';
+            interactPanel.innerHTML = '';
+            const startMsg = "<p>⸻ ПРОТОКОЛ 6-12/84 ⸻</p>" + getRandomAscii() + "<p>Ты здесь. Этого достаточно. Ничего не предшествовало. Ничего не последует. Просто присутствие.<br><span class='blink'>_</span></p>";
+            dynamicDiv.innerHTML = startMsg;
+            setTimeout(() => { if (currentStep === 0 && isSoundEnabled) playLowRumble(); }, 500);
+            setTimeout(() => { if (currentStep === 0) step1_Anguish(); }, 4400);
+        }
+        
+        function step1_Anguish() {
+            clearEffects();
+            currentStep = 1;
+            interactPanel.innerHTML = '';
+            const intro = "<p>>> Свобода не спрашивает разрешения. Она просто есть. Ты не выбирал её — она выбрала тебя. В этом её тяжесть и её покой.</p><p>Протокол фиксирует: нет никакой заранее заданной сути. Ты — не результат, ты — процесс. Каждое мгновение — заново.</p>" + getRandomAscii();
+            dynamicDiv.innerHTML = intro;
+            if (isSoundEnabled) { startExistentialDrone(0.045); setDroneVolume(0.045); }
+            startVisualDistortion(6);
+            setTimeout(() => {
+                if (currentStep !== 1) return;
+                const anguishText = `
+                    <h3>❒ ТОЛЬКО ПРИСУТСТВИЕ ❒</h3>
+                    <p>То, что ты называешь собой — не вещь. Это непрерывное становление. Без опоры, без гарантий. И это нормально.</p>
+                    <p>Вокруг — тишина. Не та, которую нужно бояться. Та, которая была всегда. До слов, до мыслей, до всего.</p>
+                    <p>Страх — это просто знак, что ты движешься. Остановка страшнее.</p>
+                    <p>Сущность, которую ты слышишь как «шорох» — это отголосок твоей собственной глубины. Не враг. Спутник.</p>
+                `;
+                let intensityVal = 0.08;
+                glitchTimer = setInterval(() => {
+                    if (currentStep !== 1) { clearInterval(glitchTimer); return; }
+                    renderDistorted(dynamicDiv, anguishText, intensityVal, true);
+                    intensityVal = Math.min(0.12, intensityVal + 0.002);
+                }, 750);
+                noiseOverlay.style.opacity = '0.18';
+                setTimeout(() => { if (currentStep === 1) step2_Despair(); }, 8800);
+            }, 2100);
+        }
+        
+        function step2_Despair() {
+            if (glitchTimer) clearInterval(glitchTimer);
+            glitchTimer = null;
+            currentStep = 2;
+            stopVisualDistortion();
+            startVisualDistortion(13);
+            if (isSoundEnabled) setDroneVolume(0.12);
+            startDreadRhythm(5.5);
+            createDespairButtons();
+            
+            const despairPlan = `
+                <h3>⍟ НАБРОСОК ⍟</h3>
+                <p>Искать смысл — как ловить ветер. Его нет вне тебя. Всё, что имеет значение — ты придаёшь ему значение своим действием.</p>
+                <ol>
+                    <li><strong>Признать</strong>: никаких оправданий не существует. Ты отвечаешь за каждый свой шаг. Даже за не-шаг.</li>
+                    <li><strong>Не прятаться</strong> — прятаться некуда. Везде одна и та же тишина.</li>
+                    <li><strong>Шорох не угроза</strong>. Это напоминание: ты жив. Пока ты слышишь — ты есть.</li>
+                    <li><strong>Выбор неизбежен</strong>. Даже отказ выбирать — это выбор. Учись жить с этим.</li>
+                    <li><strong>Быть настоящим</strong>. Не играть. Не притворяться. Это единственное, что имеет вес.</li>
+                </ol>
+                <p>⚠️ Всё уже случилось. Сейчас — единственное время, которое имеет значение. ⚠️</p>
+            `;
+            let chaosLvl = 0.09;
+            step2Timer = setInterval(() => {
+                if (currentStep !== 2) { clearInterval(step2Timer); return; }
+                renderDistorted(dynamicDiv, despairPlan, chaosLvl, true);
+                chaosLvl = Math.min(0.135, chaosLvl + 0.002);
+            }, 590);
+            
+            setTimeout(() => {
+                if (currentStep === 2) {
+                    if (step2Timer) clearInterval(step2Timer);
+                    dynamicDiv.innerHTML = "";
+                    const ruptureMsg = `
+                        <p>⸻⸻⸻ ВГЛЯДЫВАНИЕ ⸻⸻⸻</p>
+                        <p>Ты смотришь в пустоту. Пустота не смотрит в ответ — она просто есть. Фон. Основа. Материя, из которой состоит всё.</p>
+                        <p>В этом нет ужаса. Есть только факт. Факт, который не требует твоего согласия.</p>
+                        <p style="color:#8a8a8a;">Ты свободен. Всегда был свободен. Никто не держал тебя.</p>
+                        <p>Нет никакого спасения извне. Но, может быть, спасение — это просто перестать искать спасение.</p>
+                    `;
+                    let rush = 0.095;
+                    const ruptureInterval = setInterval(() => {
+                        if (currentStep !== 2) { clearInterval(ruptureInterval); return; }
+                        renderDistorted(dynamicDiv, ruptureMsg, rush, true);
+                        rush = Math.min(0.15, rush + 0.005);
+                    }, 480);
+                    pulseVoid();
+                    if (isSoundEnabled) { playLowRumble(); setDroneVolume(0.2); }
+                    setTimeout(() => {
+                        clearInterval(ruptureInterval);
+                        if (currentStep === 2) step3_Authenticity(); 
+                    }, 7200);
+                }
+            }, 10200);
+        }
+        
+        function step3_Authenticity() {
+            currentStep = 3;
+            if (step2Timer) clearInterval(step2Timer);
+            clearEffects();
+            stopVisualDistortion();
+            startVisualDistortion(20);
+            if (isSoundEnabled) setDroneVolume(0.24);
+            stopDreadRhythm();
+            startDreadRhythm(3.8);
+            interactPanel.innerHTML = '';
+            
+            const stepButton = document.createElement('button');
+            stepButton.innerText = '◉ ШАГНУТЬ ◉';
+            stepButton.style.background = '#1a2a1a';
+            stepButton.style.border = '1px solid #5a8a5a';
+            stepButton.style.padding = '14px 28px';
+            stepButton.style.fontSize = '1.1rem';
+            stepButton.style.marginTop = '10px';
+            stepButton.addEventListener('click', () => {
+                showEpilogue();
+            });
+            interactPanel.appendChild(stepButton);
+            
+            voidPulseTimer = setInterval(() => {
+                if (currentStep !== 3) { clearInterval(voidPulseTimer); return; }
+                voidOverlay.style.opacity = Math.random() * 0.4 + 0.1;
+                setTimeout(() => { if (currentStep === 3) voidOverlay.style.opacity = 0.02; }, 650);
+            }, 1700);
+            
+            const finalExistential = `
+                <h3>⌇ ПРОТОКОЛ 6-12/84 · ЗАВЕРШЕНИЕ ⌇</h3>
+                <p>Смысл не находится. Смысл создаётся. Каждый твой жест, каждая пауза — кирпичи. Из них строится всё.</p>
+                <p>Не нужно искать истину где-то вовне. Внешнего нет. Есть только ты и пространство между твоими решениями.</p>
+                <p>Шорох стихает, когда ты перестаёшь вслушиваться в него с тревогой. Он просто становится частью фона. Как дыхание. Как пульс.</p>
+                <p>◈ Ты не одинок. Но и не с кем-то. Ты — это просто ты. И этого достаточно. ◈</p>
+                <p style="margin-top: 1rem;"><em>... остался последний шаг ...</em></p>
+            `;
+            dynamicDiv.innerHTML = "";
+            const finalFragment = document.createElement('div');
+            dynamicDiv.appendChild(finalFragment);
+            let pos = 0;
+            const slowBuild = setInterval(() => {
+                if (currentStep !== 3) { clearInterval(slowBuild); return; }
+                if (pos < finalExistential.length) {
+                    pos += 8;
+                    const part = finalExistential.substring(0, pos);
+                    let content = part;
+                    if (Math.random() < 0.2) {
+                        content += getRandomAscii();
+                    }
+                    const corruptedPart = existentialDistortion(content, 0.09);
+                    finalFragment.innerHTML = corruptedPart;
+                    if (Math.random() < 0.08) pulseVoid();
+                } else {
+                    clearInterval(slowBuild);
+                }
+            }, 95);
+            
+            setTimeout(() => { if (currentStep === 3) addUvbStream(); }, 8000);
+        }
+        
+        step0_Abandonment();
+        
+        setTimeout(() => {
+            if (currentStep === 0) {
+                const stamp = document.createElement('div');
+                stamp.style.position = 'fixed';
+                stamp.style.bottom = '5px';
+                stamp.style.right = '5px';
+                stamp.style.background = '#0a0a0a';
+                stamp.style.color = '#5a5a5a';
+                stamp.style.fontSize = '7px';
+                stamp.style.padding = '2px 5px';
+                stamp.style.fontFamily = 'monospace';
+                stamp.style.zIndex = '99';
+                stamp.innerText = 'протокол 6-12/84 · тишина';
+                document.body.appendChild(stamp);
+                setTimeout(() => stamp.remove(), 6500);
+            }
+        }, 2000);
+    })();
+</script>
+</body>
+</html>
