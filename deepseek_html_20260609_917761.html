@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Коломенский инцидент: Медленный протокол</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: #000;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', 'VT323', monospace;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.2) 0px,
+                rgba(0, 0, 0, 0.2) 2px,
+                transparent 2px,
+                transparent 6px
+            );
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0.5;
+            mix-blend-mode: multiply;
+        }
+
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJmIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjciIG51bU9jdGF2ZXM9IjMiLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjZikiIG9wYWNpdHk9IjAuNCIvPjwvc3ZnPg==');
+            background-repeat: repeat;
+            background-size: 120px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 19;
+            transition: opacity 0.2s;
+            mix-blend-mode: overlay;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .screen {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #111 0%, #030303 100%);
+            color: #aaa;
+            font-size: 1.5rem;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: left;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            transition: all 0.1s linear;
+            position: relative;
+            overflow-y: auto;
+            box-shadow: inset 0 0 60px rgba(0,0,0,0.8);
+            cursor: pointer;
+        }
+
+        .message-box {
+            max-width: 950px;
+            background: rgba(0,0,0,0.75);
+            padding: 2rem;
+            border-left: 3px solid #5f5f5f;
+            border-right: 1px solid #2a2a2a;
+            backdrop-filter: blur(1px);
+            font-family: 'Courier New', monospace;
+            word-break: break-word;
+            line-height: 1.6;
+            width: 100%;
+        }
+
+        .message-box p {
+            margin-bottom: 1rem;
+            text-indent: 0;
+        }
+        .message-box ol, .message-box ul {
+            margin: 0.8rem 0 0.8rem 2rem;
+            padding-left: 0.5rem;
+        }
+        .message-box li {
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+        .message-box h3 {
+            margin: 1rem 0 0.5rem;
+            color: #bcbcbc;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 1.3rem;
+        }
+
+        .glitch-char {
+            display: inline-block;
+            filter: blur(0.8px);
+            text-shadow: 0 0 4px #aa0000, 0 0 2px #888;
+            opacity: 0.95;
+            color: #c0c0c0;
+        }
+
+        /* Убрали тряску экрана — класса shake-all больше нет и не используется */
+        .blink {
+            animation: blinkAnime 0.9s step-end infinite;
+        }
+
+        @keyframes blinkAnime {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        button {
+            background: #1f1f1f;
+            color: #ccc;
+            border: 1px solid #5a5a5a;
+            font-family: monospace;
+            font-size: 1.2rem;
+            padding: 10px 20px;
+            margin-top: 30px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #333;
+            color: white;
+            border-color: #aaa;
+            box-shadow: 0 0 8px rgba(255,255,255,0.3);
+        }
+
+        .blood-overlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: radial-gradient(ellipse at bottom, rgba(80,0,0,0.6), transparent);
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .scream-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #8b0000;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s linear;
+        }
+        .scream-content {
+            font-size: 5rem;
+            text-align: center;
+            color: #fff;
+            text-shadow: 0 0 20px black;
+            font-weight: bold;
+            background: rgba(0,0,0,0.7);
+            padding: 2rem 4rem;
+            border-radius: 20px;
+            transform: rotate(2deg);
+            border: 3px solid #ff4444;
+        }
+        .scream-content span {
+            display: block;
+            font-size: 3rem;
+            margin-top: 20px;
+            letter-spacing: 8px;
+        }
+
+        .interactive-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        .interactive-buttons button {
+            background: #2a1f1f;
+            border-color: #8b0000;
+            color: #ffaaaa;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .interactive-buttons button:hover {
+            background: #4a2a2a;
+            color: white;
+            box-shadow: 0 0 12px red;
+        }
+
+        .audio-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            color: #aaa;
+            font-size: 12px;
+            padding: 4px 10px;
+            font-family: monospace;
+            z-index: 30;
+            border-left: 2px solid #6a6a6a;
+            pointer-events: none;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="noise-overlay" id="noiseOverlay"></div>
+<div class="blood-overlay" id="bloodOverlay"></div>
+<div class="scream-overlay" id="screamOverlay">
+    <div class="scream-content">
+        ⚠️ НЕ ДОПУСКАЕТСЯ ⚠️<br>
+        <span>НАРУШЕНИЕ ПРОТОКОЛА</span>
+    </div>
+</div>
+<div class="audio-hint" id="audioHint">🔊 Щёлкните для активации звука</div>
+<div id="game-container">
+    <div class="screen" id="screen">
+        <div class="message-box" id="messageBox">
+            <div id="dynamicText">Загрузка интерфейса...</div>
+            <div id="buttonArea"></div>
+            <div id="interactivePanel" class="interactive-buttons"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // --- ЗВУКОВАЯ СИСТЕМА ---
+        let audioCtx = null;
+        let whiteNoiseNode = null;
+        let whiteNoiseGain = null;
+        let isSoundEnabled = false;
+        let screamInterval = null;
+        
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            document.getElementById('audioHint').style.opacity = '0';
+        }
+        
+        function startWhiteNoise(volume = 0.15) {
+            if (!audioCtx || !isSoundEnabled) return;
+            if (whiteNoiseNode) {
+                whiteNoiseGain.gain.value = volume;
+                return;
+            }
+            const bufferSize = 4096;
+            const noiseNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+            noiseNode.onaudioprocess = function(e) {
+                const output = e.outputBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = (Math.random() * 2 - 1) * 0.6;
+                }
+            };
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = volume;
+            noiseNode.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            whiteNoiseNode = noiseNode;
+            whiteNoiseGain = gainNode;
+        }
+        
+        function setWhiteNoiseVolume(volume) {
+            if (whiteNoiseGain && audioCtx && isSoundEnabled) {
+                whiteNoiseGain.gain.value = Math.min(0.45, Math.max(0, volume));
+            }
+        }
+        
+        function stopWhiteNoise() {
+            if (whiteNoiseNode && audioCtx) {
+                whiteNoiseNode.disconnect();
+                if (whiteNoiseGain) whiteNoiseGain.disconnect();
+                whiteNoiseNode = null;
+                whiteNoiseGain = null;
+            }
+        }
+        
+        function playDialupSound() {
+            if (!audioCtx || !isSoundEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gain1 = audioCtx.createGain();
+            const gain2 = audioCtx.createGain();
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.25;
+            osc1.type = 'sine';
+            osc2.type = 'triangle';
+            osc1.frequency.value = 980;
+            osc2.frequency.value = 1520;
+            osc1.connect(gain1);
+            osc2.connect(gain2);
+            gain1.connect(masterGain);
+            gain2.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+            gain1.gain.setValueAtTime(0.3, now);
+            gain2.gain.setValueAtTime(0.3, now);
+            osc1.start();
+            osc2.start();
+            gain1.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            gain2.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            setTimeout(() => {
+                try { osc1.stop(); osc2.stop(); masterGain.disconnect(); } catch(e) {}
+            }, 1300);
+        }
+        
+        function playScreamSound() {
+            if (!audioCtx || !isSoundEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.45;
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.exponentialRampToValueAtTime(220, now + 0.15);
+            osc.frequency.exponentialRampToValueAtTime(1550, now + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+            setTimeout(() => { try { osc.stop(); gain.disconnect(); } catch(e) {} }, 950);
+        }
+        
+        function playRandomScream() {
+            if (!audioCtx || !isSoundEnabled) return;
+            if (Math.random() > 0.5) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.2;
+            osc.type = 'square';
+            osc.frequency.value = 500 + Math.random() * 800;
+            osc.frequency.exponentialRampToValueAtTime(200 + Math.random() * 400, now + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
+            setTimeout(() => { try { osc.stop(); } catch(e) {} }, 800);
+        }
+        
+        function startRandomScreams(intervalSec = 4) {
+            if (screamInterval) clearInterval(screamInterval);
+            screamInterval = setInterval(() => {
+                if (isSoundEnabled && (currentStep === 2 || currentStep === 3)) {
+                    playRandomScream();
+                }
+            }, intervalSec * 1000);
+        }
+        
+        function stopRandomScreams() {
+            if (screamInterval) clearInterval(screamInterval);
+            screamInterval = null;
+        }
+        
+        function playScreech() {
+            if (!audioCtx || !isSoundEnabled) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.35;
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(1200, now);
+            osc.frequency.exponentialRampToValueAtTime(300, now + 0.2);
+            osc.frequency.exponentialRampToValueAtTime(1800, now + 0.5);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            setTimeout(() => { try { osc.stop(); gain.disconnect(); } catch(e) {} }, 1300);
+        }
+        
+        // --- СКРИМЕР ---
+        function showScream() {
+            const screamDiv = document.getElementById('screamOverlay');
+            if (!screamDiv) return;
+            playScreamSound();
+            screamDiv.style.transition = 'opacity 0.1s';
+            screamDiv.style.opacity = '1';
+            screamDiv.style.pointerEvents = 'none';
+            setTimeout(() => {
+                screamDiv.style.opacity = '0';
+                setTimeout(() => {
+                    screamDiv.style.transition = '';
+                }, 300);
+            }, 400);
+        }
+        
+        // --- ЛОГИКА ИГРЫ (медленная, без тряски) ---
+        let currentStep = 0;
+        let glitchInterval = null;
+        let noiseInterval = null;
+        let step2interval = null;
+        let bloodPulse = null;
+        let screenElem = document.getElementById('screen');
+        const dynamicContainer = document.getElementById('dynamicText');
+        const buttonArea = document.getElementById('buttonArea');
+        const interactivePanel = document.getElementById('interactivePanel');
+        const noiseOverlay = document.getElementById('noiseOverlay');
+        const bloodOverlay = document.getElementById('bloodOverlay');
+        
+        screenElem.addEventListener('click', () => {
+            if (!audioCtx) {
+                initAudio();
+                isSoundEnabled = true;
+                startWhiteNoise(0.02);
+                setWhiteNoiseVolume(0.02);
+                document.getElementById('audioHint').innerHTML = '🔊 Звук активирован';
+                setTimeout(() => {
+                    if(document.getElementById('audioHint')) document.getElementById('audioHint').style.opacity = '0.5';
+                }, 1500);
+            } else if (!isSoundEnabled) {
+                isSoundEnabled = true;
+                startWhiteNoise(0.02);
+                setWhiteNoiseVolume(0.02);
+            }
+        });
+        
+        const glitchSymbols = ['#', '%', '&', '?', '‡', '†', '░', '▒', '█', '�', '⸮', '⛧', '◉', '⬤', '⌧', '☠', '☢'];
+        function getRandomGlitchChar() { return glitchSymbols[Math.floor(Math.random() * glitchSymbols.length)]; }
+        
+        function corruptHtmlRarely(htmlString, intensity = 0.06) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlString;
+            function processNode(node) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    let text = node.nodeValue;
+                    let newHtml = '';
+                    for (let i = 0; i < text.length; i++) {
+                        let ch = text[i];
+                        if (ch === ' ' || ch === '\n' || ch === '\r') { newHtml += ch; continue; }
+                        if (Math.random() < intensity) {
+                            newHtml += `<span class="glitch-char">${getRandomGlitchChar()}</span>`;
+                        } else {
+                            if (Math.random() < 0.02) newHtml += `<span style="opacity:0.8;">${ch}</span>`;
+                            else newHtml += ch;
+                        }
+                    }
+                    const spanWrapper = document.createElement('span');
+                    spanWrapper.innerHTML = newHtml;
+                    node.parentNode.replaceChild(spanWrapper, node);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    for (let child of node.childNodes) processNode(child);
+                }
+            }
+            processNode(tempDiv);
+            return tempDiv.innerHTML;
+        }
+        
+        function updateWithCorruption(container, baseHtml, intensity = 0.06) {
+            container.innerHTML = corruptHtmlRarely(baseHtml, intensity);
+        }
+        
+        function clearAllEffects() {
+            if (glitchInterval) clearInterval(glitchInterval);
+            if (noiseInterval) clearInterval(noiseInterval);
+            if (step2interval) clearInterval(step2interval);
+            if (bloodPulse) clearInterval(bloodPulse);
+            glitchInterval = null; noiseInterval = null; step2interval = null; bloodPulse = null;
+            if (noiseOverlay) noiseOverlay.style.opacity = '0';
+            screenElem.style.filter = '';
+            screenElem.style.transform = '';
+        }
+        
+        // ПОМЕХИ — только визуальный шум, без тряски
+        function startNoiseAndDistortion(durationSec = null) {
+            if (noiseOverlay) noiseOverlay.style.opacity = '0.25';
+            if (noiseInterval) clearInterval(noiseInterval);
+            noiseInterval = setInterval(() => {
+                if (Math.random() > 0.6) {
+                    const contrastVal = 0.85 + Math.random() * 0.7;
+                    const brightnessVal = 0.75 + Math.random() * 0.7;
+                    screenElem.style.filter = `contrast(${contrastVal}) brightness(${brightnessVal})`;
+                } else {
+                    screenElem.style.filter = `contrast(1.02) brightness(0.96)`;
+                }
+            }, 350);
+            if (durationSec) {
+                setTimeout(() => {
+                    if (noiseInterval) clearInterval(noiseInterval);
+                    noiseInterval = null;
+                    screenElem.style.filter = '';
+                    if (noiseOverlay) noiseOverlay.style.opacity = '0';
+                }, durationSec * 1000);
+            }
+        }
+        
+        function stopNoise() {
+            if (noiseInterval) clearInterval(noiseInterval);
+            noiseInterval = null;
+            screenElem.style.filter = '';
+            if (noiseOverlay) noiseOverlay.style.opacity = '0';
+        }
+        
+        function showBloodyLegsEffect() {
+            bloodOverlay.style.opacity = '0.7';
+            setTimeout(() => {
+                bloodOverlay.style.transition = 'opacity 2s';
+                bloodOverlay.style.opacity = '0';
+                setTimeout(() => { bloodOverlay.style.transition = ''; }, 2000);
+            }, 800);
+        }
+        
+        function createDangerButtons() {
+            interactivePanel.innerHTML = '';
+            const btn1 = document.createElement('button');
+            btn1.innerText = '⚠️ ЗАПРЕЩЁННЫЙ ПУНКТ ⚠️';
+            const btn2 = document.createElement('button');
+            btn2.innerText = '🕳️ ЭВАКУАЦИЯ 404 🕳️';
+            const btn3 = document.createElement('button');
+            btn3.innerText = '🦶🏻 ПРОВЕРИТЬ НИЖНЮЮ КОНЕЧНОСТЬ 🦶🏻';
+            const handler = () => { showScream(); interactivePanel.innerHTML = ''; };
+            btn1.addEventListener('click', handler);
+            btn2.addEventListener('click', handler);
+            btn3.addEventListener('click', handler);
+            interactivePanel.appendChild(btn1);
+            interactivePanel.appendChild(btn2);
+            interactivePanel.appendChild(btn3);
+        }
+        
+        function removeDangerButtons() { interactivePanel.innerHTML = ''; }
+        
+        // ЭТАП 0: медленная ошибка
+        function step0_ConnectionError() {
+            clearAllEffects();
+            currentStep = 0;
+            dynamicContainer.innerHTML = '';
+            buttonArea.innerHTML = '';
+            removeDangerButtons();
+            let baseMsg = "<p>⚠️ <strong>СБОЙ СВЯЗИ С ЦЕНТРОМ</strong> ⚠️</p><p>НЕ УДАЁТСЯ УСТАНОВИТЬ ЗАЩИЩЁННЫЙ КАНАЛ.<br>Код ошибки: 0xKOЛ0МНА<br>Проверьте кабельную сеть. <span class='blink'>_</span></p>";
+            dynamicContainer.innerHTML = baseMsg;
+            setTimeout(() => { if (currentStep === 0 && isSoundEnabled) playDialupSound(); }, 500);
+            setTimeout(() => { if (currentStep === 0) step1_LettersMutating(); }, 4500); // дольше
+        }
+        
+        function step1_LettersMutating() {
+            clearAllEffects();
+            currentStep = 1;
+            removeDangerButtons();
+            let phase1Html = "<p>> СБОЙ СИГНАЛА. СТРУКТУРА ДАННЫХ ПОВРЕЖДЕНА...</p><p>ПОИСК РЕЗЕРВНОГО КАНАЛА...</p><p>ВНИМАНИЕ: ОБНАРУЖЕНА АНОМАЛИЯ В ПОТОКЕ.<br>СИМВОЛЫ НАЧИНАЮТ МУТИРОВАТЬ...</p>";
+            dynamicContainer.innerHTML = phase1Html;
+            if (isSoundEnabled) { startWhiteNoise(0.04); setWhiteNoiseVolume(0.04); }
+            setTimeout(() => {
+                if (currentStep !== 1) return;
+                const longHtml = `
+                    <p>> РАСШИФРОВКА НЕВОЗМОЖНА. ЗНАКИ ДЕФОРМИРУЮТСЯ.</p>
+                    <p><< <strong>КОЛОМЕНСКИЙ ИНЦИДЕНТ, ПРОТОКОЛ 6-12/84</strong> >><br>СТАТУС: НЕ ПОДТВЕРЖДЁН. НИЖНИЕ КОНЕЧНОСТИ ОТСУТСТВУЮТ?</p>
+                    <p>ЗАРЕГИСТРИРОВАНА АНОМАЛЬНАЯ ВОЛНА. СИСТЕМА ЗАГРУЗИЛА НЕИЗВЕСТНЫЙ ПРОТОКОЛ...</p>
+                    <p><em>План действий «Колодец» загружен...</em></p>
+                `;
+                let intensity = 0.06;
+                glitchInterval = setInterval(() => {
+                    if (currentStep !== 1) { clearInterval(glitchInterval); return; }
+                    updateWithCorruption(dynamicContainer, longHtml, intensity);
+                }, 800); // реже обновление
+                noiseOverlay.style.opacity = '0.1';
+                setTimeout(() => { if (currentStep === 1) step2_CrazyPlan(); }, 9000); // дольше
+            }, 2000);
+        }
+        
+        function step2_CrazyPlan() {
+            if (glitchInterval) clearInterval(glitchInterval);
+            glitchInterval = null;
+            currentStep = 2;
+            stopNoise();
+            startNoiseAndDistortion(16);
+            if (isSoundEnabled) setWhiteNoiseVolume(0.09);
+            startRandomScreams(5);
+            createDangerButtons();
+            
+            const crazyPlanHtml = `
+                <h3>☠ АВАРИЙНЫЙ ПРОТОКОЛ «КОЛОДЕЦ» ☠</h3>
+                <p><em>Выполнять неукоснительно. Не обращать внимания на чувство отсутствия ниже пояса.</em></p>
+                <ol>
+                    <li><strong>Зафиксировать исчезновение ног</strong> — они уже перешли в распоряжение комитета. Не пытайтесь встать.</li>
+                    <li><strong>Переместиться к источнику инфразвука</strong> (зелёный индикатор на панели). Не смотреть вниз.</li>
+                    <li><strong>Повторять шифр «8-4-15-16-23-42»</strong> — это обманет внешний периметр.</li>
+                    <li><strong>Употребить содержимое ампулы №6</strong> — если ампула пуста, использовать любой красный раствор.</li>
+                    <li><strong>Начертить на полу знак «Круг в квадрате» слюной</strong> — буквы должны дрожать, оператор не должен двигаться.</li>
+                    <li><strong>Вызвать дежурного по КБ «Коломна-84» шёпотом</strong> — он не ответит, но начнётся счёт.</li>
+                    <li><strong>Слиться с перегородкой</strong>. Задержать дыхание. Ноги не нужны.</li>
+                    <li><strong>Инициировать перезагрузку сознания</strong> — закрыть глаза и считать в обратном порядке.</li>
+                </ol>
+                <p>⚠️ <em>Если вы прочитали этот список — вы уже в зоне поражения. План неэффективен. Но выполнение обязательно.</em> ⚠️</p>
+                <p>Сущность «Шорох» приближается. Не реагировать на отсутствие нижней половины.</p>
+            `;
+            if (step2interval) clearInterval(step2interval);
+            let currentIntensity = 0.065;
+            step2interval = setInterval(() => {
+                if (currentStep !== 2) { clearInterval(step2interval); return; }
+                updateWithCorruption(dynamicContainer, crazyPlanHtml, currentIntensity);
+                currentIntensity = Math.min(0.1, currentIntensity + 0.002);
+            }, 750);
+            
+            setTimeout(() => {
+                if (currentStep === 2) {
+                    if (step2interval) clearInterval(step2interval);
+                    dynamicContainer.innerHTML = "";
+                    const shockHtml = `
+                        <p>> ОБНАРУЖЕНА СУЩНОСТЬ БЕЗ НИЖНИХ КОНЕЧНОСТЕЙ.</p>
+                        <p>ОНА ЗАФИКСИРОВАНА. КОЛОМЕНСКИЙ СЦЕНАРИЙ ПОВТОРЯЕТСЯ. НЕ ШЕВЕЛИТЬСЯ.</p>
+                        <p><span style="color:#8b0000;">НОГИ ... ОТСУТСТВУЮТ. ПОДТВЕРДИТЕ ОТСУТСТВИЕ.</span></p>
+                        <p>ЭВАКУАЦИЯ ЗАПРЕЩЕНА ПРОТОКОЛОМ.</p>
+                        <p style="font-size:1.8rem;">⚡🌀⚡</p>
+                        <p>СУЩНОСТЬ ПРИБЛИЖАЕТСЯ. ВЫПОЛНЯЙТЕ ПЛАН «КОЛОДЕЦ».</p>
+                    `;
+                    let shockIntensity = 0.07;
+                    let shockInterval = setInterval(() => {
+                        if (currentStep !== 2) { clearInterval(shockInterval); return; }
+                        updateWithCorruption(dynamicContainer, shockHtml, shockIntensity);
+                        shockIntensity = Math.min(0.12, shockIntensity + 0.004);
+                    }, 500);
+                    showBloodyLegsEffect();
+                    if (isSoundEnabled) { playScreech(); setWhiteNoiseVolume(0.18); }
+                    setTimeout(() => {
+                        clearInterval(shockInterval);
+                        if (currentStep === 2) step3_Culmination();
+                    }, 7000);
+                }
+            }, 11000);
+        }
+        
+        function step3_Culmination() {
+            currentStep = 3;
+            if (step2interval) clearInterval(step2interval);
+            clearAllEffects();
+            removeDangerButtons();
+            stopNoise();
+            startNoiseAndDistortion(18);
+            if (isSoundEnabled) setWhiteNoiseVolume(0.28);
+            startRandomScreams(3.5);
+            
+            interactivePanel.innerHTML = '';
+            const finalTrap = document.createElement('button');
+            finalTrap.innerText = '💀 НАЖМИТЕ ДЛЯ АКТИВАЦИИ ПРОТОКОЛА 💀';
+            finalTrap.style.background = '#4a0000';
+            finalTrap.style.fontSize = '1.4rem';
+            finalTrap.addEventListener('click', () => { showScream(); });
+            interactivePanel.appendChild(finalTrap);
+            
+            bloodPulse = setInterval(() => {
+                if (currentStep !== 3) { clearInterval(bloodPulse); bloodPulse = null; return; }
+                bloodOverlay.style.opacity = Math.random() * 0.5 + 0.15;
+                setTimeout(() => { if (currentStep === 3) bloodOverlay.style.opacity = 0.05; }, 500);
+            }, 1600);
+            
+            const finalHtml = `
+                <h3>‼️ КРИТИЧЕСКИЙ СБОЙ. ПРОТОКОЛ 6-12/84 ‼️</h3>
+                <p>НАРУШЕНИЕ ЦЕЛОСТНОСТИ СИСТЕМЫ. СУЩНОСТЬ ВНУТРИ КОНТУРА. ПЕРЕДВИГАЕТСЯ ПОЛЗКОМ.</p>
+                <p>ПОКРЫТИЕ ЗАЛИТО ТЁМНОЙ ЖИДКОСТЬЮ. ВЫ НЕ МОЖЕТЕ ПЕРЕДВИГАТЬСЯ....</p>
+                <p><strong>У ВАС НЕТ НОГ. ЭТО ФАКТ.</strong> ПОСМОТРИТЕ ВНИЗ. ЭФФЕКТ «ПУСТОТА».</p>
+                <p>КОЛОМЕНСКИЙ КОШМАР НЕ ЗАВЕРШЁН. ОН ТОЛЬКО НАЧИНАЕТСЯ.</p>
+                <ol>
+                    <li>Финальный пункт: уничтожить данный документ.</li>
+                    <li>Сущность уже рядом. Вы слышите хруст стекла.</li>
+                    <li>Ваши конечности изъяты комитетом. Вы прикованы к полу субстанцией.</li>
+                    <li>Они идут по следу... Идите за ними? Но вы неспособны.</li>
+                </ol>
+                <p><em>Игра завершена. Ваша личность перезаписана.</em></p>
+            `;
+            dynamicContainer.innerHTML = "";
+            let fullContainer = document.createElement('div');
+            dynamicContainer.appendChild(fullContainer);
+            let displayedLength = 0;
+            let buildInterval = setInterval(() => {
+                if (currentStep !== 3) { clearInterval(buildInterval); return; }
+                if (displayedLength < finalHtml.length) {
+                    displayedLength += 12;
+                    let currentSlice = finalHtml.substring(0, displayedLength);
+                    let tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = currentSlice;
+                    let corrupted = corruptHtmlRarely(tempDiv.innerHTML, 0.09);
+                    fullContainer.innerHTML = corrupted;
+                    if (Math.random() < 0.1) showBloodyLegsEffect();
+                } else {
+                    clearInterval(buildInterval);
+                    let restartBtn = document.createElement('button');
+                    restartBtn.innerText = '> ПЕРЕЗАПУСК СИСТЕМЫ <';
+                    restartBtn.onclick = () => {
+                        clearAllEffects();
+                        stopRandomScreams();
+                        stopWhiteNoise();
+                        bloodOverlay.style.opacity = '0';
+                        noiseOverlay.style.opacity = '0';
+                        if (bloodPulse) clearInterval(bloodPulse);
+                        currentStep = -1;
+                        dynamicContainer.innerHTML = "";
+                        buttonArea.innerHTML = "";
+                        interactivePanel.innerHTML = "";
+                        step0_ConnectionError();
+                    };
+                    buttonArea.appendChild(restartBtn);
+                    // нет тряски экрана
+                    setTimeout(() => { if (currentStep === 3) screenElem.style.transform = ''; }, 100);
+                }
+            }, 120);
+            setTimeout(() => {
+                if (currentStep === 3 && buttonArea.children.length === 0) {
+                    let fallbackBtn = document.createElement('button');
+                    fallbackBtn.innerText = '> ПЕРЕЗАПУСК <';
+                    fallbackBtn.onclick = () => {
+                        clearAllEffects();
+                        stopRandomScreams();
+                        stopWhiteNoise();
+                        bloodOverlay.style.opacity = '0';
+                        noiseOverlay.style.opacity = '0';
+                        if (bloodPulse) clearInterval(bloodPulse);
+                        currentStep = -1;
+                        dynamicContainer.innerHTML = "";
+                        buttonArea.innerHTML = "";
+                        interactivePanel.innerHTML = "";
+                        step0_ConnectionError();
+                    };
+                    buttonArea.appendChild(fallbackBtn);
+                }
+            }, 22000);
+        }
+        
+        step0_ConnectionError();
+        
+        setTimeout(() => {
+            if (currentStep === 0) {
+                let fakeErr = document.createElement('div');
+                fakeErr.style.position = 'fixed';
+                fakeErr.style.bottom = '12px';
+                fakeErr.style.right = '12px';
+                fakeErr.style.background = '#111';
+                fakeErr.style.color = '#8b8b8b';
+                fakeErr.style.fontSize = '11px';
+                fakeErr.style.padding = '4px 8px';
+                fakeErr.style.fontFamily = 'monospace';
+                fakeErr.style.zIndex = '99';
+                fakeErr.style.borderLeft = '2px solid #5f5f5f';
+                fakeErr.innerText = 'ОШИБКА ПРОТОКОЛА 6-12/84 | НЕ ДОПУСКАЕТСЯ';
+                document.body.appendChild(fakeErr);
+                setTimeout(() => fakeErr.remove(), 5000);
+            }
+        }, 1500);
+    })();
+</script>
+</body>
+</html>
